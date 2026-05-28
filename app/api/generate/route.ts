@@ -5,17 +5,10 @@ export async function POST(request: Request) {
     const { topic, audience, tone, goal, style, length, details } =
       await request.json();
 
-    if (!process.env.GEMINI_API_KEY) {
-      return NextResponse.json(
-        { error: "Missing GEMINI_API_KEY" },
-        { status: 500 }
-      );
-    }
-
     const prompt = `
 You are an expert LinkedIn ghostwriter.
 
-Generate EXACTLY 3 different LinkedIn posts.
+Generate EXACTLY 3 LinkedIn post variations.
 
 TOPIC:
 ${topic}
@@ -39,59 +32,60 @@ DETAILS:
 ${details}
 
 RULES:
-- Each variation should feel different
 - Strong hook
 - Natural human writing
-- Short readable paragraphs
+- Short paragraphs
+- Different variation styles
 - No fake statistics
-- No robotic AI phrases
-- End with thoughtful engagement question
+- No robotic AI language
+- End with thoughtful question
 - Minimal emojis
-- No hashtags unless necessary
 
-FORMAT STRICTLY LIKE THIS:
+FORMAT:
 
 ===POST 1===
-(post here)
+(post)
 
 ===POST 2===
-(post here)
+(post)
 
 ===POST 3===
-(post here)
+(post)
 `;
 
-    const geminiResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+    const response = await fetch(
+      "https://openrouter.ai/api/v1/chat/completions",
       {
         method: "POST",
         headers: {
+          Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          contents: [
+            model: "openrouter/free",
+          messages: [
             {
-              parts: [{ text: prompt }],
+              role: "user",
+              content: prompt,
             },
           ],
         }),
       }
     );
 
-    const data = await geminiResponse.json();
+    const data = await response.json();
 
-    if (!geminiResponse.ok) {
+    if (!response.ok) {
       return NextResponse.json(
         {
-          error:
-            data.error?.message || "Gemini API failed",
+          error: data.error?.message || "OpenRouter API failed",
         },
-        { status: geminiResponse.status }
+        { status: response.status }
       );
     }
 
     const text =
-      data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      data.choices?.[0]?.message?.content || "";
 
     const splitPosts = text.split("===POST");
 
