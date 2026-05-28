@@ -7,98 +7,115 @@ export async function POST(request: Request) {
 
     if (!process.env.GEMINI_API_KEY) {
       return NextResponse.json(
-        { error: "Missing GEMINI_API_KEY in .env.local" },
+        { error: "Missing GEMINI_API_KEY" },
         { status: 500 }
       );
     }
 
-    const makePrompt = (variationName: string) => `
+    const prompt = `
 You are an expert LinkedIn ghostwriter.
 
-Write ONE LinkedIn post.
+Generate EXACTLY 3 different LinkedIn posts.
 
-Variation style: ${variationName}
-Target audience: ${audience}
-Tone: ${tone}
-Goal: ${goal}
-Selected style: ${style}
-Length: ${length}
-Topic: ${topic}
-User details: ${details}
+TOPIC:
+${topic}
 
-Rules:
-- Write for general LinkedIn users, not only founders
-- Start with a strong hook
-- Use short paragraphs
-- Use natural human English
-- Avoid fake statistics
-- Avoid robotic AI phrases
-- Avoid too many emojis
-- End with a thoughtful question
+AUDIENCE:
+${audience}
+
+TONE:
+${tone}
+
+GOAL:
+${goal}
+
+STYLE:
+${style}
+
+LENGTH:
+${length}
+
+DETAILS:
+${details}
+
+RULES:
+- Each variation should feel different
+- Strong hook
+- Natural human writing
+- Short readable paragraphs
+- No fake statistics
+- No robotic AI phrases
+- End with thoughtful engagement question
+- Minimal emojis
 - No hashtags unless necessary
-- Return only the post text
 
-Length guide:
-Short = 80 to 130 words
-Medium = 130 to 220 words
-Long = 220 to 320 words
+FORMAT STRICTLY LIKE THIS:
+
+===POST 1===
+(post here)
+
+===POST 2===
+(post here)
+
+===POST 3===
+(post here)
 `;
 
-    async function generateOnePost(title: string) {
-      const geminiResponse = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            contents: [
-              {
-                parts: [{ text: makePrompt(title) }],
-              },
-            ],
-          }),
-        }
-      );
-
-      const data = await geminiResponse.json();
-
-      if (!geminiResponse.ok) {
-        throw new Error(data.error?.message || "Gemini API failed");
+    const geminiResponse = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [{ text: prompt }],
+            },
+          ],
+        }),
       }
+    );
 
-      return (
-        data.candidates?.[0]?.content?.parts?.[0]?.text ||
-        "No post generated. Please try again."
+    const data = await geminiResponse.json();
+
+    if (!geminiResponse.ok) {
+      return NextResponse.json(
+        {
+          error:
+            data.error?.message || "Gemini API failed",
+        },
+        { status: geminiResponse.status }
       );
     }
 
-    const [post1, post2, post3] = await Promise.all([
-      generateOnePost("Clear and Professional"),
-      generateOnePost("Story Driven"),
-      generateOnePost("Conversation Starter"),
-    ]);
+    const text =
+      data.candidates?.[0]?.content?.parts?.[0]?.text || "";
 
-    return NextResponse.json({
-      posts: [
-        {
-          title: "Variation 1 - Clear and Professional",
-          content: post1,
-        },
-        {
-          title: "Variation 2 - Story Driven",
-          content: post2,
-        },
-        {
-          title: "Variation 3 - Conversation Starter",
-          content: post3,
-        },
-      ],
-    });
+    const splitPosts = text.split("===POST");
+
+    const posts = splitPosts
+      .slice(1)
+      .map((section: string, index: number) => {
+        const cleaned = section
+          .replace(`${index + 1}===`, "")
+          .trim();
+
+        return {
+          title: `Variation ${index + 1}`,
+          content: cleaned,
+        };
+      });
+
+    return NextResponse.json({ posts });
   } catch (error: any) {
     return NextResponse.json(
-      { error: error.message || "Server error while generating posts" },
+      {
+        error:
+          error.message ||
+          "Server error while generating posts",
+      },
       { status: 500 }
     );
   }
